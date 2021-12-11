@@ -15,6 +15,8 @@ xrays <- function(data, axes, ...) {
 xrays.table <- function(data, axes = NULL, value = "value", col_types = NULL, ...) {
   ellipsis::check_dots_empty()
 
+  attrs <- attributes(data)
+  attributes(data) <- attrs[names(attrs) != "call"]
   new_xrays(data, value, col_types)
 }
 
@@ -24,15 +26,18 @@ xrays.data.frame <- function(data, axes = NULL, value = -1, ...) {
 
   nms <- names(data)
   value <- tidyselect::vars_pull(nms, value)
-  rhs <- stringr::str_c(nms[nms != value], collapse = ' + ')
-  form <- as.formula(stringr::str_glue("{value} ~ {rhs}"))
+  nms <- vctrs::vec_slice(nms, nms != value)
 
-  col_types <- as.list(vctrs::vec_slice(data, 0))
+  rhs <- stringr::str_c(nms, collapse = " + ")
+  form <- as.formula(stringr::str_c(value, rhs,
+                                    sep = " ~ "))
 
-  xrays(xtabs(form, data),
-        axes = axes,
-        value = value,
-        col_types = col_types)
+  col_types <- as.list(vctrs::vec_slice(data[nms], 0))
+
+  xrays.table(xtabs(form, data),
+              axes = axes,
+              value = value,
+              col_types = col_types)
 }
 
 
@@ -54,9 +59,13 @@ xrays.xrays <- function(data, axes, ...) {
 }
 
 #' @export
-as.data.frame.xrays <- function(x, row.names = NULL, stringsAsFactors = FALSE, ...) {
-  out <- as_tibble.xrays(x)
-  as.data.frame(out)
+as.table.xrays <- function(x, ...) {
+  ellipsis::check_dots_empty()
+
+  attrs <- attributes(x)
+  attributes(x) <- attrs[!names(attrs) %in% c("value", "col_types")]
+  class(x) <- "table"
+  x
 }
 
 #' @importFrom tibble as_tibble
@@ -65,17 +74,24 @@ tibble::as_tibble
 
 #' @export
 as_tibble.xrays <- function(x, ...) {
-  out <- NextMethod(n = attr(x, "value"),
-                    ...)
+  out <- as_tibble(as.table(x),
+                   n = attr(x, "value"))
   col_types <- attr(x, "col_types")
   for (i in names(col_types)) {
     to <- col_types[[i]]
 
-    if (is.numeric(to)) {
-      out[[i]] <- as.numeric(out[[i]])
+    if (is.factor(to)) {
+      out[[i]] <- factor(out[[i]],
+                         levels = levels(to))
     } else {
-      out[[i]] <- vctrs::vec_cast(out[[i]], to)
+      out[[i]] <- as(out[[i]], class(to)[[1]])
     }
   }
   out
+}
+
+#' @export
+as.data.frame.xrays <- function(x, row.names = NULL, stringsAsFactors = FALSE, ...) {
+  out <- as_tibble.xrays(x)
+  as.data.frame(out)
 }
