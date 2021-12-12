@@ -11,6 +11,7 @@ Encoding: UTF-8
 LazyData: true
 Imports: 
     ellipsis,
+    stringi,
     stringr,
     vctrs
 RoxygenNote: 7.1.2
